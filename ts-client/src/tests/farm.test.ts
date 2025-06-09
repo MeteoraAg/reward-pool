@@ -1,11 +1,10 @@
 import { Cluster, Connection, Keypair, PublicKey } from "@solana/web3.js";
-import AmmImpl from "@mercurial-finance/dynamic-amm-sdk";
+import AmmImpl from "@meteora-ag/dynamic-amm-sdk";
 import { PoolFarmImpl } from "../farm";
 import { AnchorProvider, BN, Wallet } from "@coral-xyz/anchor";
 import { bs58 } from "@coral-xyz/anchor/dist/cjs/utils/bytes";
-import { airDropSol, getFarmProgram } from "../utils";
+import { airDropSol } from "../utils";
 import { DEVNET_COIN } from "../constant";
-import { TokenListProvider } from "@solana/spl-token-registry";
 
 const DEVNET_POOL = new PublicKey(
   "BAHscmu1NncGS7t4rc5gSBPv1UFEMkvLaon1Ahdd5rHi"
@@ -54,15 +53,13 @@ describe("Interact with devnet farm", () => {
     const pool = await AmmImpl.create(
       DEVNET.connection,
       new PublicKey(DEVNET_POOL),
-      USDT!,
-      USDC!,
       {
         cluster: DEVNET.cluster as Cluster,
       }
     );
 
-    const inAmountALamport = new BN(0.1 * 10 ** pool.tokenA.decimals);
-    const inAmountBLamport = new BN(0.1 * 10 ** pool.tokenB.decimals);
+    const inAmountALamport = new BN(0.1 * 10 ** USDT.decimals);
+    const inAmountBLamport = new BN(0.1 * 10 ** USDC.decimals);
 
     const { minPoolTokenAmountOut, tokenAInAmount, tokenBInAmount } =
       pool.getDepositQuote(inAmountALamport, inAmountBLamport, false, 1);
