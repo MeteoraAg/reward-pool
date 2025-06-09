@@ -21,7 +21,7 @@ import {
   parseLogs,
 } from "./utils";
 import { FARM_PROGRAM_ID } from "./constant";
-import { chunkedGetMultipleAccountInfos } from "@mercurial-finance/dynamic-amm-sdk/dist/cjs/src/amm/utils";
+import { chunkedGetMultipleAccountInfos } from "@meteora-ag/dynamic-amm-sdk/dist/cjs/src/amm/utils";
 
 const chunkedFetchMultipleUserAccount = async (
   program: FarmProgram,
