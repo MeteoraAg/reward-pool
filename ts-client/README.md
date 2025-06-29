@@ -89,5 +89,5 @@ const claimResult = await provider.sendAndConfirm(claimTx); // Transaction hash
 
 ```ts
 const unStakeTx = await farm.withdraw(mockWallet.publicKey, farmBalance); // Web3 Transaction Object
-const unstakeResult = await provider.sendAndConfirm(depositTx); // Transaction hash
+const unstakeResult = await provider.sendAndConfirm(unStakeTx); // Transaction hash
 ```
