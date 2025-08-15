@@ -16,7 +16,7 @@ use anyhow::Ok;
 use anyhow::Result;
 use clap::*;
 use farming::Pool;
-use solana_program::instruction::Instruction;
+use anchor_lang::solana_program::instruction::Instruction;
 use std::ops::Deref;
 use std::rc::Rc;
 use std::str::FromStr;
@@ -162,9 +162,9 @@ fn initialize_pool<C: Deref<Target = impl Signer> + Clone>(
             reward_b_vault: reward_b_vault_pubkey,
             authority: authority.pubkey(),
             base: base_pubkey,
-            system_program: solana_program::system_program::ID,
+            system_program: anchor_lang::solana_program::system_program::ID,
             token_program: spl_token::ID,
-            rent: solana_program::sysvar::rent::ID,
+            rent: anchor_lang::solana_program::sysvar::rent::ID,
         }
         .to_account_metas(None),
         data: farming::instruction::InitializePool { reward_duration }.data(),
@@ -201,7 +201,7 @@ pub fn create_user<C: Deref<Target = impl Signer> + Clone>(
             pool: *pool,
             user: user_pubkey,
             owner: owner.pubkey(),
-            system_program: solana_program::system_program::ID,
+            system_program: anchor_lang::solana_program::system_program::ID,
         }
         .to_account_metas(None),
         data: farming::instruction::CreateUser {}.data(),

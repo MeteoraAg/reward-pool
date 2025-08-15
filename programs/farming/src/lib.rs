@@ -94,7 +94,7 @@ pub mod farming {
         pool.user_stake_count = 0;
         pool.base_key = ctx.accounts.base.key();
         // Unwrap here is safe as long as the key matches the account in the context
-        pool.pool_bump = *ctx.bumps.get("pool").unwrap();
+        pool.pool_bump = ctx.bumps.pool;
         Ok(())
     }
 
@@ -108,7 +108,7 @@ pub mod farming {
         user.reward_a_per_token_pending = 0;
         user.reward_b_per_token_pending = 0;
         user.balance_staked = 0;
-        user.nonce = *ctx.bumps.get("user").unwrap();
+        user.nonce = ctx.bumps.user;
 
         let pool = &mut ctx.accounts.pool;
         pool.user_stake_count = pool.user_stake_count.checked_add(1).unwrap();
@@ -482,7 +482,7 @@ pub mod farming {
             &[&ctx.accounts.pool.key()],
             ctx.accounts.staking_vault.amount,
         )?;
-        solana_program::program::invoke_signed(
+        anchor_lang::solana_program::program::invoke_signed(
             &ix,
             &[
                 ctx.accounts.token_program.to_account_info(),
@@ -499,7 +499,7 @@ pub mod farming {
             &ctx.accounts.pool.key(),
             &[&ctx.accounts.pool.key()],
         )?;
-        solana_program::program::invoke_signed(
+        anchor_lang::solana_program::program::invoke_signed(
             &ix,
             &[
                 ctx.accounts.token_program.to_account_info(),
@@ -519,7 +519,7 @@ pub mod farming {
             &[&ctx.accounts.pool.key()],
             ctx.accounts.reward_a_vault.amount,
         )?;
-        solana_program::program::invoke_signed(
+        anchor_lang::solana_program::program::invoke_signed(
             &ix,
             &[
                 ctx.accounts.token_program.to_account_info(),
@@ -536,7 +536,7 @@ pub mod farming {
             &ctx.accounts.pool.key(),
             &[&ctx.accounts.pool.key()],
         )?;
-        solana_program::program::invoke_signed(
+        anchor_lang::solana_program::program::invoke_signed(
             &ix,
             &[
                 ctx.accounts.token_program.to_account_info(),
@@ -557,7 +557,7 @@ pub mod farming {
                 &[&ctx.accounts.pool.key()],
                 ctx.accounts.reward_b_vault.amount,
             )?;
-            solana_program::program::invoke_signed(
+            anchor_lang::solana_program::program::invoke_signed(
                 &ix,
                 &[
                     ctx.accounts.token_program.to_account_info(),
@@ -574,7 +574,7 @@ pub mod farming {
                 &ctx.accounts.pool.key(),
                 &[&ctx.accounts.pool.key()],
             )?;
-            solana_program::program::invoke_signed(
+            anchor_lang::solana_program::program::invoke_signed(
                 &ix,
                 &[
                     ctx.accounts.token_program.to_account_info(),

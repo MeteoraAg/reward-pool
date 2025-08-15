@@ -1,4 +1,7 @@
-anchor_version = "0.24.2"
+anchor_version = "0.31.1"
+
+[toolchain]
+anchor_version = "0.31.1"
 
 [workspace]
 members = ["programs/farming"]

@@ -6,6 +6,11 @@ import {
   PublicKey,
   TransactionInstruction,
 } from "@solana/web3.js";
+import {
+  ASSOCIATED_TOKEN_PROGRAM_ID,
+  TOKEN_PROGRAM_ID,
+  Token,
+} from "@solana/spl-token";
 import fetch from "node-fetch";
 
 import { Farming, IDL } from "./idl/farming-idl";
@@ -16,10 +21,6 @@ import {
   FARM_PROGRAM_ID,
 } from "./constant";
 import { PoolInfo } from "./types";
-import {
-  createAssociatedTokenAccountIdempotentInstruction,
-  getAssociatedTokenAddressSync,
-} from "@solana/spl-token";
 
 export const getFarmProgram = (connection: Connection) => {
   const provider = new AnchorProvider(
@@ -72,14 +73,21 @@ export const getOrCreateATAInstruction = async (
 ): Promise<[PublicKey, TransactionInstruction?]> => {
   let toAccount;
   try {
-    toAccount = getAssociatedTokenAddressSync(tokenMint, owner);
+    toAccount = await Token.getAssociatedTokenAddress(
+      ASSOCIATED_TOKEN_PROGRAM_ID,
+      TOKEN_PROGRAM_ID,
+      tokenMint,
+      owner
+    );
     const account = await connection.getAccountInfo(toAccount);
     if (!account) {
-      const ix = createAssociatedTokenAccountIdempotentInstruction(
-        owner,
+      const ix = Token.createAssociatedTokenAccountInstruction(
+        ASSOCIATED_TOKEN_PROGRAM_ID,
+        TOKEN_PROGRAM_ID,
+        tokenMint,
         toAccount,
         owner,
-        tokenMint
+        owner
       );
       return [toAccount, ix];
     }

@@ -13,9 +13,9 @@ no-entrypoint = []
 cpi = ["no-entrypoint"]
 devnet = []
 verbose = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
 
 [dependencies]
-anchor-lang = "0.28.0"
-anchor-spl = "0.28.0"
-spl-math = { version = "0.1.0", features = ["no-entrypoint"] }
-solana-program = "1.16"
+anchor-lang = "0.31.1"
+anchor-spl = "0.31.1"
+spl-math = { version = "0.3.0", features = ["no-entrypoint"] }
