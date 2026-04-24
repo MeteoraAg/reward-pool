@@ -5,18 +5,15 @@ use crate::args::*;
 use crate::utils::*;
 use anchor_client::anchor_lang::InstructionData;
 use anchor_client::anchor_lang::ToAccountMetas;
-use anchor_client::solana_sdk::commitment_config::CommitmentConfig;
-use anchor_client::solana_sdk::compute_budget::ComputeBudgetInstruction;
-use anchor_client::solana_sdk::pubkey::Pubkey;
-use anchor_client::solana_sdk::signer::keypair::*;
-use anchor_client::solana_sdk::signer::Signer;
-use anchor_client::{Client, Program};
+use anchor_client::{Client, CommitmentConfig, Instruction, Program, Signer};
+use anchor_lang::prelude::Pubkey;
 use anchor_spl::token::spl_token;
 use anyhow::Ok;
 use anyhow::Result;
 use clap::*;
 use farming::Pool;
-use solana_program::instruction::Instruction;
+use solana_compute_budget_interface::ComputeBudgetInstruction;
+use solana_keypair::{read_keypair_file, Keypair};
 use std::ops::Deref;
 use std::rc::Rc;
 use std::str::FromStr;
@@ -30,10 +27,12 @@ fn main() -> Result<()> {
     println!("Wallet {:#?}", wallet);
     println!("Program ID: {:#?}", opts.config_override.program_id);
 
+    let payer = Rc::new(payer);
+
     let program_id = Pubkey::from_str(opts.config_override.program_id.as_str())?;
     let client = Client::new_with_options(
         opts.config_override.cluster,
-        Rc::new(Keypair::from_bytes(&payer.to_bytes())?),
+        Rc::clone(&payer),
         CommitmentConfig::finalized(),
     );
 
@@ -162,9 +161,9 @@ fn initialize_pool<C: Deref<Target = impl Signer> + Clone>(
             reward_b_vault: reward_b_vault_pubkey,
             authority: authority.pubkey(),
             base: base_pubkey,
-            system_program: solana_program::system_program::ID,
+            system_program: anchor_lang::solana_program::system_program::ID,
             token_program: spl_token::ID,
-            rent: solana_program::sysvar::rent::ID,
+            rent: anchor_lang::prelude::rent::ID,
         }
         .to_account_metas(None),
         data: farming::instruction::InitializePool { reward_duration }.data(),
@@ -201,7 +200,7 @@ pub fn create_user<C: Deref<Target = impl Signer> + Clone>(
             pool: *pool,
             user: user_pubkey,
             owner: owner.pubkey(),
-            system_program: solana_program::system_program::ID,
+            system_program: anchor_lang::solana_program::system_program::ID,
         }
         .to_account_metas(None),
         data: farming::instruction::CreateUser {}.data(),

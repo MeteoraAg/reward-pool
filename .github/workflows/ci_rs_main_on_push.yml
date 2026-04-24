@@ -13,9 +13,9 @@ on:
       - develop
 
 env:
-  SOLANA_CLI_VERSION: 1.16.22
-  NODE_VERSION: 18.14.2
-  ANCHOR_CLI_VERSION: 0.28.0
+  SOLANA_CLI_VERSION: 3.1.10
+  ANCHOR_CLI_VERSION: 1.0.0
+  TOOLCHAIN: 1.93.0
 
 jobs:
   changed_files:
@@ -23,7 +23,7 @@ jobs:
     outputs:
       program: ${{steps.changed-files-specific.outputs.any_changed}}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - name: Get specific changed files
@@ -40,33 +40,31 @@ jobs:
     needs: changed_files
     if: needs.changed_files.outputs.program == 'true'
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-solana
       - uses: ./.github/actions/setup-dep
       - uses: ./.github/actions/setup-anchor-cli
       # Install rust + toolchain
-      - uses: actions-rs/toolchain@v1
+      - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: stable
-          components: clippy
+          toolchain: ${{ env.TOOLCHAIN }}
+          components: clippy, rustfmt
       # Cache rust, cargo
-      - uses: Swatinem/rust-cache@v1
+      - uses: Swatinem/rust-cache@v2
       # Cache node_modules
-      - uses: actions/cache@v2
+      - uses: actions/cache@v4
         id: cache-node-modules
         with:
           path: ./node_modules
-          key: ${{ runner.os }}-${{ hashFiles('./package-lock.json') }}
+          key: ${{ runner.os }}-${{ hashFiles('./bun.lock') }}
       # Check code formatting
       - run: cargo fmt -- --check
         shell: bash
-      # Clippy check
-      # - run: cargo clippy --package farming && cargo clippy --package locking && cargo clippy --package staking
-      #   shell: bash
       # Testing
-      - run: npm install
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
         shell: bash
-      - run: cd programs && cargo test -- --nocapture && cargo test-bpf -- --nocapture && cd ../..
+      - run: cd programs && cargo test -- --nocapture && cd ../..
         shell: bash
-      - run: anchor test -- --features devnet
+      - run: anchor test --ignore-keys -- --features devnet
         shell: bash

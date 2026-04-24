@@ -1,9 +1,11 @@
-use anchor_client::{
-    solana_sdk::{pubkey::Pubkey, signer::Signer},
-    Program,
-};
+use anchor_client::{Program, Signer};
+use anchor_lang::prelude::Pubkey;
 use anyhow::Result;
-use spl_associated_token_account::{create_associated_token_account, get_associated_token_address};
+use anchor_spl::token::spl_token;
+use spl_associated_token_account::{
+    get_associated_token_address,
+    instruction::create_associated_token_account,
+};
 use std::ops::Deref;
 
 pub struct UserPDA {
@@ -33,6 +35,7 @@ pub fn get_or_create_ata<C: Deref<Target = impl Signer> + Clone>(
                 &program.payer(),
                 &wallet_address,
                 &token_mint,
+                &spl_token::ID,
             ));
         let tx_signature = builder.send()?;
         println!("Signature {:?}", tx_signature);

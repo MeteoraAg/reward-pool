@@ -3,18 +3,14 @@
 #![allow(rustdoc::missing_doc_code_examples)]
 #![warn(clippy::unwrap_used)]
 #![warn(clippy::integer_arithmetic)]
-#![warn(missing_docs)]
 
-use std::convert::Into;
-use std::convert::TryInto;
 use std::fmt::Debug;
 
 use crate::pool::*;
 use anchor_lang::prelude::*;
-use anchor_lang::solana_program::{clock, sysvar};
+use anchor_lang::solana_program::clock;
 use anchor_spl::token::spl_token;
 use anchor_spl::token::{self, Mint, Token, TokenAccount};
-use std::convert::TryFrom;
 
 /// Export for pool implementation
 pub mod pool;
@@ -94,7 +90,7 @@ pub mod farming {
         pool.user_stake_count = 0;
         pool.base_key = ctx.accounts.base.key();
         // Unwrap here is safe as long as the key matches the account in the context
-        pool.pool_bump = *ctx.bumps.get("pool").unwrap();
+        pool.pool_bump = ctx.bumps.pool;
         Ok(())
     }
 
@@ -108,7 +104,7 @@ pub mod farming {
         user.reward_a_per_token_pending = 0;
         user.reward_b_per_token_pending = 0;
         user.balance_staked = 0;
-        user.nonce = *ctx.bumps.get("user").unwrap();
+        user.nonce = ctx.bumps.user;
 
         let pool = &mut ctx.accounts.pool;
         pool.user_stake_count = pool.user_stake_count.checked_add(1).unwrap();
@@ -152,7 +148,7 @@ pub mod farming {
         // Transfer tokens into the stake vault.
         {
             let cpi_ctx = CpiContext::new(
-                ctx.accounts.token_program.to_account_info(),
+                *ctx.accounts.token_program.key,
                 token::Transfer {
                     from: ctx.accounts.stake_from_account.to_account_info(),
                     to: ctx.accounts.staking_vault.to_account_info(),
@@ -204,7 +200,7 @@ pub mod farming {
             let pool_signer = &[&seeds[..]];
 
             let cpi_ctx = CpiContext::new_with_signer(
-                ctx.accounts.token_program.to_account_info(),
+                *ctx.accounts.token_program.key,
                 token::Transfer {
                     from: ctx.accounts.staking_vault.to_account_info(),
                     to: ctx.accounts.stake_from_account.to_account_info(),
@@ -288,7 +284,7 @@ pub mod farming {
         // Transfer reward A tokens into the A vault.
         if amount_a > 0 {
             let cpi_ctx = CpiContext::new(
-                ctx.accounts.token_program.to_account_info(),
+                *ctx.accounts.token_program.key,
                 token::Transfer {
                     from: ctx.accounts.from_a.to_account_info(),
                     to: ctx.accounts.reward_a_vault.to_account_info(),
@@ -302,7 +298,7 @@ pub mod farming {
         // Transfer reward B tokens into the B vault.
         if amount_b > 0 {
             let cpi_ctx = CpiContext::new(
-                ctx.accounts.token_program.to_account_info(),
+                *ctx.accounts.token_program.key,
                 token::Transfer {
                     from: ctx.accounts.from_b.to_account_info(),
                     to: ctx.accounts.reward_b_vault.to_account_info(),
@@ -357,7 +353,7 @@ pub mod farming {
 
             if reward_amount > 0 {
                 let cpi_ctx = CpiContext::new_with_signer(
-                    ctx.accounts.token_program.to_account_info(),
+                    *ctx.accounts.token_program.key,
                     token::Transfer {
                         from: ctx.accounts.reward_a_vault.to_account_info(),
                         to: ctx.accounts.reward_a_account.to_account_info(),
@@ -381,7 +377,7 @@ pub mod farming {
 
             if reward_amount > 0 {
                 let cpi_ctx = CpiContext::new_with_signer(
-                    ctx.accounts.token_program.to_account_info(),
+                    *ctx.accounts.token_program.key,
                     token::Transfer {
                         from: ctx.accounts.reward_b_vault.to_account_info(),
                         to: ctx.accounts.reward_b_account.to_account_info(),
@@ -422,7 +418,7 @@ pub mod farming {
             ];
             let pool_signer = &[&seeds[..]];
             let cpi_ctx = CpiContext::new_with_signer(
-                ctx.accounts.token_program.to_account_info(),
+                *ctx.accounts.token_program.key,
                 token::Transfer {
                     from: ctx.accounts.staking_vault.to_account_info(),
                     to: ctx.accounts.withdraw_to_account.to_account_info(),
@@ -482,7 +478,7 @@ pub mod farming {
             &[&ctx.accounts.pool.key()],
             ctx.accounts.staking_vault.amount,
         )?;
-        solana_program::program::invoke_signed(
+        anchor_lang::solana_program::program::invoke_signed(
             &ix,
             &[
                 ctx.accounts.token_program.to_account_info(),
@@ -499,7 +495,7 @@ pub mod farming {
             &ctx.accounts.pool.key(),
             &[&ctx.accounts.pool.key()],
         )?;
-        solana_program::program::invoke_signed(
+        anchor_lang::solana_program::program::invoke_signed(
             &ix,
             &[
                 ctx.accounts.token_program.to_account_info(),
@@ -519,7 +515,7 @@ pub mod farming {
             &[&ctx.accounts.pool.key()],
             ctx.accounts.reward_a_vault.amount,
         )?;
-        solana_program::program::invoke_signed(
+        anchor_lang::solana_program::program::invoke_signed(
             &ix,
             &[
                 ctx.accounts.token_program.to_account_info(),
@@ -536,7 +532,7 @@ pub mod farming {
             &ctx.accounts.pool.key(),
             &[&ctx.accounts.pool.key()],
         )?;
-        solana_program::program::invoke_signed(
+        anchor_lang::solana_program::program::invoke_signed(
             &ix,
             &[
                 ctx.accounts.token_program.to_account_info(),
@@ -557,7 +553,7 @@ pub mod farming {
                 &[&ctx.accounts.pool.key()],
                 ctx.accounts.reward_b_vault.amount,
             )?;
-            solana_program::program::invoke_signed(
+            anchor_lang::solana_program::program::invoke_signed(
                 &ix,
                 &[
                     ctx.accounts.token_program.to_account_info(),
@@ -574,7 +570,7 @@ pub mod farming {
                 &ctx.accounts.pool.key(),
                 &[&ctx.accounts.pool.key()],
             )?;
-            solana_program::program::invoke_signed(
+            anchor_lang::solana_program::program::invoke_signed(
                 &ix,
                 &[
                     ctx.accounts.token_program.to_account_info(),
@@ -807,10 +803,10 @@ pub struct Fund<'info> {
     )]
     funder: Signer<'info>,
     /// Funder reward A ATA
-    #[account(mut)]
+    #[account(mut, dup)]
     from_a: Box<Account<'info, TokenAccount>>,
     /// Funder reward B ATA
-    #[account(mut)]
+    #[account(mut, dup)]
     from_b: Box<Account<'info, TokenAccount>>,
     /// Misc.
     token_program: Program<'info, Token>,
@@ -823,7 +819,7 @@ pub struct WithdrawExtraToken<'info> {
     #[account(
         has_one = staking_vault,
         has_one = authority,
-        constraint = pool.reward_duration_end < sysvar::clock::Clock::get().unwrap().unix_timestamp.try_into().unwrap(),
+        constraint = pool.reward_duration_end < Clock::get().unwrap().unix_timestamp.try_into().unwrap(),
     )]
     pool: Box<Account<'info, Pool>>,
     /// Staking vault PDA
@@ -874,10 +870,10 @@ pub struct ClaimReward<'info> {
     /// Authority of user
     owner: Signer<'info>,
     /// User's Reward A ATA
-    #[account(mut)]
+    #[account(mut, dup)]
     reward_a_account: Box<Account<'info, TokenAccount>>,
     /// User's Reward B ATA
-    #[account(mut)]
+    #[account(mut, dup)]
     reward_b_account: Box<Account<'info, TokenAccount>>,
     // Misc.
     token_program: Program<'info, Token>,
@@ -935,7 +931,7 @@ pub struct ClosePool<'info> {
         has_one = reward_b_vault,
         constraint = pool.paused,
         constraint = pool.reward_duration_end > 0,
-        constraint = pool.reward_duration_end < sysvar::clock::Clock::get().unwrap().unix_timestamp.try_into().unwrap(),
+        constraint = pool.reward_duration_end < Clock::get().unwrap().unix_timestamp.try_into().unwrap(),
         constraint = pool.user_stake_count == 0,
     )]
     pool: Account<'info, Pool>,

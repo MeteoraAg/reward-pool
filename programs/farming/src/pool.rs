@@ -1,5 +1,5 @@
 pub use crate::*;
-use spl_math::uint::U192;
+use ruint::aliases::U192;
 
 /// Rate by funding
 fn calculate_reward_rate(funding_amount: u64, reward_duration: u64) -> Option<u128> {
@@ -25,31 +25,33 @@ pub fn reward_per_token(
     }
 
     let time_period = U192::from(last_time_reward_applicable)
-        .checked_sub(pool.last_update_time.into())
+        .checked_sub(U192::from(pool.last_update_time))
         .unwrap();
     let a = pool
         .reward_a_per_token_stored
         .checked_add(
-            time_period
-                .checked_mul(pool.get_reward_a_rate().into())
-                .unwrap()
-                .checked_div(total_staked.into())
-                .unwrap()
-                .try_into()
-                .unwrap(), //back to u128
+            u128::try_from(
+                time_period
+                    .checked_mul(U192::from(pool.get_reward_a_rate()))
+                    .unwrap()
+                    .checked_div(U192::from(total_staked))
+                    .unwrap(),
+            )
+            .unwrap(),
         )
         .unwrap();
 
     let b = pool
         .reward_b_per_token_stored
         .checked_add(
-            time_period
-                .checked_mul(pool.get_reward_b_rate().into())
-                .unwrap()
-                .checked_div(total_staked.into())
-                .unwrap()
-                .try_into()
-                .unwrap(), //back to u128
+            u128::try_from(
+                time_period
+                    .checked_mul(U192::from(pool.get_reward_b_rate()))
+                    .unwrap()
+                    .checked_div(U192::from(total_staked))
+                    .unwrap(),
+            )
+            .unwrap(),
         )
         .unwrap();
 

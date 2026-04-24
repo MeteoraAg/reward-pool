@@ -1,10 +1,10 @@
-anchor_version = "0.24.2"
+[toolchain]
+anchor_version = "1.0.0"
+solana_version = "3.1.10"
+package_manager = "bun"
 
 [workspace]
 members = ["programs/farming"]
-
-[registry]
-url = "https://anchor.projectserum.com"
 
 [provider]
 cluster = "localnet"
@@ -12,3 +12,5 @@ wallet = "~/.config/solana/id.json"
 
 [programs.localnet]
 farming = "FarmuwXPWXvefWUeqFAa5w6rifLkq5X6E8bimYvrhCB1"
+
+[hooks]
