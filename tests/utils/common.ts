@@ -42,8 +42,7 @@ export function sendTransaction(
   svm.expireBlockhash();
   if (result instanceof FailedTransactionMetadata) {
     const logs = result.meta().logs();
-    const prettyLogs = result.meta().prettyLogs();
-    throw new Error(prettyLogs || logs.toString() || `Transaction failed: ${result.toString()}`);
+    throw new Error(logs.join("\n") || `Transaction failed: ${result.toString()}`);
   }
   return result;
 }
@@ -97,7 +96,7 @@ export function fetchPoolNullable(
   address: PublicKey
 ): Pool | null {
   const account = svm.getAccount(address);
-  if (!account) return null;
+  if (!account || account.lamports === 0 || account.data.length === 0) return null;
   return program.coder.accounts.decode("pool", Buffer.from(account.data));
 }
 
@@ -123,6 +122,6 @@ export function fetchUserNullable(
   address: PublicKey
 ): User | null {
   const account = svm.getAccount(address);
-  if (!account) return null;
+  if (!account || account.lamports === 0 || account.data.length === 0) return null;
   return program.coder.accounts.decode("user", Buffer.from(account.data));
 }

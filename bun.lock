@@ -13,7 +13,7 @@
       "devDependencies": {
         "@types/bn.js": "^5.1.0",
         "@types/mocha": "^9.1.1",
-        "litesvm": "0.7.0",
+        "litesvm": "0.1.0",
       },
     },
   },
@@ -204,19 +204,17 @@
 
     "json5": ["json5@1.0.2", "", { "dependencies": { "minimist": "^1.2.0" }, "bin": { "json5": "lib/cli.js" } }, "sha512-g1MWMLBiz8FKi1e4w0UyVL3w+iJceWAFBAaBnnGKOpNa5f8TLktkbre1+s6oICydWAm+HRUGTmI+//xv2hvXYA=="],
 
-    "litesvm": ["litesvm@0.7.0", "", { "dependencies": { "@solana/web3.js": "^1.98.4", "fastestsmallesttextencoderdecoder": "^1.0.22" }, "optionalDependencies": { "litesvm-darwin-arm64": "0.7.0", "litesvm-darwin-x64": "0.7.0", "litesvm-linux-arm64-gnu": "0.7.0", "litesvm-linux-arm64-musl": "0.7.0", "litesvm-linux-x64-gnu": "0.7.0", "litesvm-linux-x64-musl": "0.7.0" } }, "sha512-/kXywyIC4JlRSGnnI9+3CXaX6i9trScARasI7uld2iwqAdKrRvvStj4a8bA7Vql+dgzm2wO/Hpvh5COBtCJ8vQ=="],
+    "litesvm": ["litesvm@0.1.0", "", { "dependencies": { "@solana/web3.js": "^1.68.0", "bs58": "^4.0.1" }, "optionalDependencies": { "litesvm-darwin-arm64": "0.1.0", "litesvm-darwin-universal": "0.1.0", "litesvm-darwin-x64": "0.1.0", "litesvm-linux-x64-gnu": "0.1.0", "litesvm-linux-x64-musl": "0.1.0" } }, "sha512-XfpvWgYxFQUZxwFzWJTsuHRc1y34q8WtC60lhvH1xb6YX1/RBLqzIClp2JkxtlqGnDi/WPlThsXGmC3SinuPMQ=="],
 
-    "litesvm-darwin-arm64": ["litesvm-darwin-arm64@0.7.0", "", { "os": "darwin", "cpu": "arm64" }, "sha512-j2QZ0ISdbT/geMYqcnstLBPAU1ZFcr0FbeHBQmQAPOzHhVlsyBFL21EiZqhVR7Cq3+haNzBMskVzlZH9wqprLw=="],
+    "litesvm-darwin-arm64": ["litesvm-darwin-arm64@0.1.0", "", { "os": "darwin", "cpu": "arm64" }, "sha512-GwBph2fNaR9UP1nhFmQYk7UMcI9+ogrzpbDl2en70FUnPc+FDlchOts2X8IL5XFCU+m4ZGoQl/N9b+FywJN5lQ=="],
 
-    "litesvm-darwin-x64": ["litesvm-darwin-x64@0.7.0", "", { "os": "darwin", "cpu": "x64" }, "sha512-eusGeZlvIw9MWhxIx6HEKn/ze1GKt3470ylX3XTBODQkdpIXCxLPheqqblS9yYUvx2MmiAfc8L1x5wEtEYsQ5g=="],
+    "litesvm-darwin-universal": ["litesvm-darwin-universal@0.1.0", "", { "os": "darwin" }, "sha512-GjGpz77ei+RfWiMtHiES0X8GP+TafFHWu5fAQXgXEoGia7RG32Z12iJBhwfvk0T4EKbm8bqlyqhe5Me/nARm/w=="],
 
-    "litesvm-linux-arm64-gnu": ["litesvm-linux-arm64-gnu@0.7.0", "", { "os": "linux", "cpu": "arm64" }, "sha512-rv0IaH/w/O6fp2IIw+tPNCUDp8RBwVuRbSMFPgU1KqFz85FVOB2i8yAUepO3xVRTCFc1IYiPYpMa3MeHSaMAQg=="],
+    "litesvm-darwin-x64": ["litesvm-darwin-x64@0.1.0", "", { "os": "darwin", "cpu": "x64" }, "sha512-1N/IPfoT+gcpkvG9Wm7+vcaxgl/LB8hbm85cHDQRq4O1wyiRRiR6ByeNRamj+OFEDSfI7a/1NshhMobnnr2MGQ=="],
 
-    "litesvm-linux-arm64-musl": ["litesvm-linux-arm64-musl@0.7.0", "", { "os": "linux", "cpu": "arm64" }, "sha512-DKwqdfzmCdbBBj0VPWXVbhu8n8Bo5WXAit8DPnZEpTi0LytpMQXEcojndsc59+rAKEUoD9cnjfxFSOh7Jh5+aw=="],
+    "litesvm-linux-x64-gnu": ["litesvm-linux-x64-gnu@0.1.0", "", { "os": "linux", "cpu": "x64" }, "sha512-S6krvRz6BXxVZIkap5XkWwulSG4KsbFrxjyqP1X0zANa8jWMHEd09Zy9pPgfOetni2exg67fBmSlWq4sRfzlCw=="],
 
-    "litesvm-linux-x64-gnu": ["litesvm-linux-x64-gnu@0.7.0", "", { "os": "linux", "cpu": "x64" }, "sha512-3AHmtrnMX6zKpCNZFYXLgHpj7sX+1D/lruItGOKfhvQnj1HXicwdG+crXxy62mYB6r0enN70CgcFQF7JJ2sK7g=="],
-
-    "litesvm-linux-x64-musl": ["litesvm-linux-x64-musl@0.7.0", "", { "os": "linux", "cpu": "x64" }, "sha512-B3utEJkrd6oWcx46qN+i2n1BJdlNTo5Aj4E7xblcqUMphkFgzSmBYdnVEpNq54gWecSxKKYa02VcFdDg/HJ61g=="],
+    "litesvm-linux-x64-musl": ["litesvm-linux-x64-musl@0.1.0", "", { "os": "linux", "cpu": "x64" }, "sha512-3E9gC5HRCEHFsfUNDhAY9JKx6ou6JazlnYMhT89JgbAN/YsJmyEgkTfY6W7TVV90g4EAJ/K4smSmg+vV413mYQ=="],
 
     "locate-path": ["locate-path@6.0.0", "", { "dependencies": { "p-locate": "^5.0.0" } }, "sha512-iPZK6eYjbxRu3uB4/WZ3EsEIMJFMqAoopl3R+zuq0UjcAm/MO6KCweDgPfP3elTztoKP3KtnVHxTn2NHBSDVUw=="],
 
