@@ -1,10 +1,9 @@
 use anchor_client::{Program, Signer};
 use anchor_lang::prelude::Pubkey;
-use anyhow::Result;
 use anchor_spl::token::spl_token;
+use anyhow::Result;
 use spl_associated_token_account::{
-    get_associated_token_address,
-    instruction::create_associated_token_account,
+    get_associated_token_address, instruction::create_associated_token_account,
 };
 use std::ops::Deref;
 
