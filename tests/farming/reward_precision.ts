@@ -1,4 +1,4 @@
-import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import { TOKEN_PROGRAM_ID, createMintToInstruction } from "@solana/spl-token";
 import { Keypair, LAMPORTS_PER_SOL, PublicKey, SYSVAR_RENT_PUBKEY, SystemProgram, Transaction } from "@solana/web3.js";
 import BN from "bn.js";
 import assert from "assert";
@@ -13,7 +13,6 @@ import {
   createFarmingProgram,
   createToken,
   getOrCreateAssociatedTokenAccount,
-  mintSplTokenTo,
   getTokenBalance,
   sendTransaction,
   warpToTimestamp,
@@ -42,10 +41,6 @@ function createAtas(svm: LiteSVM, payer: Keypair, mints: PublicKey[], userKeypai
 
 function mintToMultiple(svm: LiteSVM, payer: Keypair, mint: PublicKey, mintAuthority: Keypair, atas: PublicKey[]) {
   for (const ata of atas) {
-    // mint directly to ATA (not to wallet)
-    const owner = svm.getAccount(ata);
-    // Actually we need to use the raw instruction approach
-    const { createMintToInstruction } = require("@solana/spl-token");
     const ix = createMintToInstruction(mint, ata, mintAuthority.publicKey, 1_000_000_000_000);
     const tx = new Transaction();
     tx.recentBlockhash = svm.latestBlockhash();

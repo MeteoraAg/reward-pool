@@ -116,8 +116,18 @@ describe("dual-farming", () => {
     }
     assert.deepStrictEqual(poolState.lastUpdateTime.toString(), "0");
     assert.deepStrictEqual(poolState.rewardDurationEnd.toString(), "0");
+    assert.deepStrictEqual(poolState.rewardARate.toString(), "0");
+    assert.deepStrictEqual(poolState.rewardBRate.toString(), "0");
+    assert.deepStrictEqual(poolState.rewardAPerTokenStored.toString(), "0");
+    assert.deepStrictEqual(poolState.rewardBPerTokenStored.toString(), "0");
     assert.deepStrictEqual(poolState.rewardDuration.toString(), REWARD_DURATION.toString());
     assert.deepStrictEqual(poolState.paused, false);
+    assert.deepStrictEqual(poolState.rewardAMint.toBase58(), rewardAMint.toBase58());
+    assert.deepStrictEqual(poolState.rewardBMint.toBase58(), rewardBMint.toBase58());
+    assert.deepStrictEqual(poolState.stakingMint.toBase58(), stakingMint.toBase58());
+    assert.deepStrictEqual(poolState.stakingVault.toBase58(), stakingVaultAddress.toBase58());
+    assert.deepStrictEqual(poolState.rewardAVault.toBase58(), rewardAVaultAddress.toBase58());
+    assert.deepStrictEqual(poolState.rewardBVault.toBase58(), rewardBVaultAddress.toBase58());
   });
 
   it("fail to initialize pool with same token mint", async () => {
@@ -149,6 +159,10 @@ describe("dual-farming", () => {
     assert.deepStrictEqual(poolState.userStakeCount.toString(), "1");
     assert.deepStrictEqual(userState.pool.toBase58(), farmingPoolAddress.toBase58());
     assert.deepStrictEqual(userState.owner.toBase58(), USER_KEYPAIR.publicKey.toBase58());
+    assert.deepStrictEqual(userState.rewardAPerTokenComplete.toString(), "0");
+    assert.deepStrictEqual(userState.rewardBPerTokenComplete.toString(), "0");
+    assert.deepStrictEqual(userState.rewardAPerTokenPending.toString(), "0");
+    assert.deepStrictEqual(userState.rewardBPerTokenPending.toString(), "0");
     assert.deepStrictEqual(userState.balanceStaked.toString(), "0");
     assert.deepStrictEqual(userState.nonce.toString(), userStakingAddressBump.toString());
   });

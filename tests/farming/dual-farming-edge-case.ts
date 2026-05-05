@@ -92,9 +92,24 @@ describe("dual-farming-edge-case", () => {
 
     const poolState = fetchPool(svm, program, farmingPoolAddress);
     assert.deepStrictEqual(poolState.authority.toBase58(), ADMIN_KEYPAIR.publicKey.toBase58());
+    assert.deepStrictEqual(poolState.baseKey.toBase58(), BASE_KEYPAIR.publicKey.toBase58());
+    for (const funder of poolState.funders) {
+      assert.deepStrictEqual(funder.toBase58(), PublicKey.default.toBase58());
+    }
     assert.deepStrictEqual(poolState.lastUpdateTime.toString(), "0");
     assert.deepStrictEqual(poolState.rewardDurationEnd.toString(), "0");
+    assert.deepStrictEqual(poolState.rewardARate.toString(), "0");
+    assert.deepStrictEqual(poolState.rewardBRate.toString(), "0");
+    assert.deepStrictEqual(poolState.rewardAPerTokenStored.toString(), "0");
+    assert.deepStrictEqual(poolState.rewardBPerTokenStored.toString(), "0");
+    assert.deepStrictEqual(poolState.rewardDuration.toString(), REWARD_DURATION.toString());
     assert.deepStrictEqual(poolState.paused, false);
+    assert.deepStrictEqual(poolState.rewardAMint.toBase58(), rewardAMint.toBase58());
+    assert.deepStrictEqual(poolState.rewardBMint.toBase58(), rewardBMint.toBase58());
+    assert.deepStrictEqual(poolState.stakingMint.toBase58(), stakingMint.toBase58());
+    assert.deepStrictEqual(poolState.stakingVault.toBase58(), stakingVaultAddress.toBase58());
+    assert.deepStrictEqual(poolState.rewardAVault.toBase58(), rewardAVaultAddress.toBase58());
+    assert.deepStrictEqual(poolState.rewardBVault.toBase58(), rewardBVaultAddress.toBase58());
   });
 
   it("create new user", async () => {
@@ -109,6 +124,12 @@ describe("dual-farming-edge-case", () => {
     const userState = fetchUser(svm, program, userStakingAddress);
     const poolState = fetchPool(svm, program, farmingPoolAddress);
     assert.deepStrictEqual(poolState.userStakeCount.toString(), "1");
+    assert.deepStrictEqual(userState.pool.toBase58(), farmingPoolAddress.toBase58());
+    assert.deepStrictEqual(userState.owner.toBase58(), USER_KEYPAIR.publicKey.toBase58());
+    assert.deepStrictEqual(userState.rewardAPerTokenComplete.toString(), "0");
+    assert.deepStrictEqual(userState.rewardBPerTokenComplete.toString(), "0");
+    assert.deepStrictEqual(userState.rewardAPerTokenPending.toString(), "0");
+    assert.deepStrictEqual(userState.rewardBPerTokenPending.toString(), "0");
     assert.deepStrictEqual(userState.balanceStaked.toString(), "0");
     assert.deepStrictEqual(userState.nonce.toString(), userStakingAddressBump.toString());
   });

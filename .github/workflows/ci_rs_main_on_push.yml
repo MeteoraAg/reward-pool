@@ -66,5 +66,5 @@ jobs:
         shell: bash
       - run: cd programs && cargo test -- --nocapture && cd ../..
         shell: bash
-      - run: anchor test --ignore-keys -- --features devnet
+      - run: bun run build-local-test
         shell: bash

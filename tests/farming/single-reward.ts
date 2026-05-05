@@ -11,7 +11,11 @@ import {
   getTokenBalance,
   sendTransaction,
   warpTime,
+  warpToTimestamp,
   fetchPool,
+  fetchPoolNullable,
+  fetchUser,
+  fetchUserNullable,
 } from "../utils";
 import {
   getPoolPda,
@@ -37,6 +41,7 @@ describe("dual-farming with single reward", () => {
 
   let userStakingATA: PublicKey = null;
   let userRewardATA: PublicKey = null;
+  let adminStakingATA: PublicKey = null;
   let adminRewardATA: PublicKey = null;
 
   before(() => {
@@ -45,7 +50,7 @@ describe("dual-farming with single reward", () => {
 
     stakingMint = createToken(svm, ADMIN_KEYPAIR, ADMIN_KEYPAIR.publicKey, TOKEN_DECIMAL);
     userStakingATA = getOrCreateAssociatedTokenAccount(svm, ADMIN_KEYPAIR, stakingMint, USER_KEYPAIR.publicKey);
-    getOrCreateAssociatedTokenAccount(svm, ADMIN_KEYPAIR, stakingMint, ADMIN_KEYPAIR.publicKey);
+    adminStakingATA = getOrCreateAssociatedTokenAccount(svm, ADMIN_KEYPAIR, stakingMint, ADMIN_KEYPAIR.publicKey);
 
     rewardMint = createToken(svm, ADMIN_KEYPAIR, ADMIN_KEYPAIR.publicKey, TOKEN_DECIMAL);
     userRewardATA = getOrCreateAssociatedTokenAccount(svm, ADMIN_KEYPAIR, rewardMint, USER_KEYPAIR.publicKey);
@@ -172,5 +177,87 @@ describe("dual-farming with single reward", () => {
 
     const afterBalance = getTokenBalance(svm, userRewardATA);
     assert.deepStrictEqual(afterBalance.gt(beforeBalance), true);
+  });
+
+  it("should pause the pool when farming finished", async () => {
+    const [farmingPoolAddress] = getPoolPda(program, stakingMint, rewardMint, rewardMint, BASE_KEYPAIR.publicKey);
+    const poolAccount = fetchPool(svm, program, farmingPoolAddress);
+    warpToTimestamp(svm, poolAccount.rewardDurationEnd.toNumber());
+
+    const ix = await program.methods
+      .pause()
+      .accountsPartial({ authority: ADMIN_KEYPAIR.publicKey, pool: farmingPoolAddress })
+      .instruction();
+    sendTransaction(svm, new Transaction().add(ix), [ADMIN_KEYPAIR]);
+    assert.deepStrictEqual(fetchPool(svm, program, farmingPoolAddress).paused, true);
+  });
+
+  it("should withdraw stake and close user account", async () => {
+    const [farmingPoolAddress] = getPoolPda(program, stakingMint, rewardMint, rewardMint, BASE_KEYPAIR.publicKey);
+    const [userStakingAddress] = getUserPda(program, farmingPoolAddress, USER_KEYPAIR.publicKey);
+    const poolAccount = fetchPool(svm, program, farmingPoolAddress);
+    const userAccount = fetchUser(svm, program, userStakingAddress);
+
+    const claimIx = await program.methods
+      .claim()
+      .accountsPartial({
+        owner: USER_KEYPAIR.publicKey,
+        pool: farmingPoolAddress,
+        rewardAAccount: userRewardATA,
+        rewardBAccount: userRewardATA,
+        rewardAVault: poolAccount.rewardAVault,
+        rewardBVault: poolAccount.rewardBVault,
+        stakingVault: poolAccount.stakingVault,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        user: userStakingAddress,
+      })
+      .instruction();
+    const withdrawIx = await program.methods
+      .withdraw(userAccount.balanceStaked)
+      .accountsPartial({
+        owner: USER_KEYPAIR.publicKey,
+        pool: farmingPoolAddress,
+        stakeFromAccount: userStakingATA,
+        stakingVault: poolAccount.stakingVault,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        user: userStakingAddress,
+      })
+      .instruction();
+    const closeUserIx = await program.methods
+      .closeUser()
+      .accountsPartial({ owner: USER_KEYPAIR.publicKey, pool: farmingPoolAddress, user: userStakingAddress })
+      .instruction();
+    sendTransaction(svm, new Transaction().add(claimIx, withdrawIx, closeUserIx), [USER_KEYPAIR]);
+
+    assert.deepStrictEqual(fetchUserNullable(svm, program, userStakingAddress), null);
+    assert.deepStrictEqual(fetchPool(svm, program, farmingPoolAddress).userStakeCount.toString(), "0");
+  });
+
+  it("should close pool", async () => {
+    const [farmingPoolAddress] = getPoolPda(program, stakingMint, rewardMint, rewardMint, BASE_KEYPAIR.publicKey);
+    const poolAccount = fetchPool(svm, program, farmingPoolAddress);
+    const beforeAdminRewardBalance = getTokenBalance(svm, adminRewardATA);
+    const rewardAVaultBalance = getTokenBalance(svm, poolAccount.rewardAVault);
+
+    const ix = await program.methods
+      .closePool()
+      .accountsPartial({
+        authority: ADMIN_KEYPAIR.publicKey,
+        pool: farmingPoolAddress,
+        refundee: ADMIN_KEYPAIR.publicKey,
+        rewardARefundee: adminRewardATA,
+        rewardBRefundee: adminRewardATA,
+        rewardAVault: poolAccount.rewardAVault,
+        rewardBVault: poolAccount.rewardBVault,
+        stakingRefundee: adminStakingATA,
+        stakingVault: poolAccount.stakingVault,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .instruction();
+    sendTransaction(svm, new Transaction().add(ix), [ADMIN_KEYPAIR]);
+
+    assert.deepStrictEqual(fetchPoolNullable(svm, program, farmingPoolAddress), null);
+    const afterAdminRewardBalance = getTokenBalance(svm, adminRewardATA);
+    assert.deepStrictEqual(afterAdminRewardBalance.sub(beforeAdminRewardBalance).toString(), rewardAVaultBalance.toString());
   });
 });

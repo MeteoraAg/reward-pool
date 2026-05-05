@@ -916,11 +916,11 @@ pub struct ClosePool<'info> {
     #[account(mut)]
     /// CHECK: refundee
     refundee: UncheckedAccount<'info>,
-    #[account(mut)]
+    #[account(mut, dup)]
     staking_refundee: Box<Account<'info, TokenAccount>>,
-    #[account(mut)]
+    #[account(mut, dup)]
     reward_a_refundee: Box<Account<'info, TokenAccount>>,
-    #[account(mut)]
+    #[account(mut, dup)]
     reward_b_refundee: Box<Account<'info, TokenAccount>>,
     #[account(
         mut,
