@@ -1,14 +1,11 @@
 [workspace]
-members = [
-    "programs/*",
-    "cli/*"
-]
+members = ["programs/*", "cli/*"]
 resolver = "2"
 
 [workspace.dependencies]
-anchor-lang = { version = "1.0.0" }
-anchor-spl = { version = "1.0.0" }
-anchor-client = { version = "=1.0.0" }
+anchor-lang = { version = "1.0.2" }
+anchor-spl = { version = "1.0.2" }
+anchor-client = { version = "1.0.2" }
 ruint = "1.12"
 
 [profile.release]
