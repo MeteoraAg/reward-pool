@@ -15,3 +15,6 @@ overflow-checks = true
 unexpected_cfgs = { level = "warn", check-cfg = [
     'cfg(target_os, values("solana"))',
 ] }
+
+[workspace.metadata.cli]
+solana = "3.1.10"
