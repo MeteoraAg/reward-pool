@@ -5,15 +5,11 @@
 
 ## Test
 ```
-anchor test -- --features devnet
+bun run build-local-test
 ```
 
 ## Build
 ```
-[Devnet]
-anchor build -- --features devnet
-
-[Mainnet]
 anchor build
 ```
 

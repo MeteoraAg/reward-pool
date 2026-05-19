@@ -7,11 +7,15 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "3.1.8", features = ["derive"] }
-farming = { path = "../../programs/farming" }
+farming = { path = "../../programs/farming", features = ["no-entrypoint"] }
 shellexpand = "2.1.0"
-anchor-lang = "0.28.0"
-anchor-spl = "0.28.0"
-anchor-client = "0.28.0"
+anchor-lang = { workspace = true }
+anchor-spl = { workspace = true }
+anchor-client = { workspace = true }
 anyhow = "1.0.57"
-solana-program = "1.16"
-spl-associated-token-account = { version = "2.2.0", features = ["no-entrypoint"] }
+spl-associated-token-account = { version = "8", features = ["no-entrypoint"] }
+solana-keypair = "3.0"
+solana-compute-budget-interface = "3.0"
+
+[lints]
+workspace = true

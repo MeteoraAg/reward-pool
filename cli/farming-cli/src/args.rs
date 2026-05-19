@@ -1,5 +1,5 @@
-use anchor_client::solana_sdk::pubkey::Pubkey;
 use anchor_client::Cluster;
+use anchor_lang::prelude::Pubkey;
 use clap::*;
 
 #[derive(Parser, Debug)]

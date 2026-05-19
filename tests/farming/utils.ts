@@ -1,18 +1,19 @@
-import * as anchor from "@project-serum/anchor";
-import { AnchorError, Program } from "@project-serum/anchor";
+import { Program } from "@anchor-lang/core";
+import { PublicKey } from "@solana/web3.js";
+import BN from "bn.js";
 import { Farming } from "../../target/types/farming";
 
-export const REWARD_DURATION = new anchor.BN(10);
+export const REWARD_DURATION = new BN(10);
 
-export async function getPoolPda(
-  program: anchor.Program<Farming>,
-  stakingMint: anchor.web3.PublicKey,
-  rewardAMint: anchor.web3.PublicKey,
-  rewardBMint: anchor.web3.PublicKey,
-  base: anchor.web3.PublicKey,
-  rewardDuration?: anchor.BN
+export function getPoolPda(
+  program: Program<Farming>,
+  stakingMint: PublicKey,
+  rewardAMint: PublicKey,
+  rewardBMint: PublicKey,
+  base: PublicKey,
+  rewardDuration?: BN
 ) {
-  return anchor.web3.PublicKey.findProgramAddress(
+  return PublicKey.findProgramAddressSync(
     [
       rewardDuration
         ? rewardDuration.toBuffer(null, 8)
@@ -26,78 +27,57 @@ export async function getPoolPda(
   );
 }
 
-export async function getStakingVaultPda(
-  program: anchor.Program<Farming>,
-  stakingMint: anchor.web3.PublicKey,
-  rewardAMint: anchor.web3.PublicKey,
-  rewardBMint: anchor.web3.PublicKey,
-  base: anchor.web3.PublicKey,
-  rewardDuration?: anchor.BN
+export function getStakingVaultPda(
+  program: Program<Farming>,
+  stakingMint: PublicKey,
+  rewardAMint: PublicKey,
+  rewardBMint: PublicKey,
+  base: PublicKey,
+  rewardDuration?: BN
 ) {
-  const [poolAddress, _] = await getPoolPda(
-    program,
-    stakingMint,
-    rewardAMint,
-    rewardBMint,
-    base,
-    rewardDuration
-  );
-  return anchor.web3.PublicKey.findProgramAddress(
+  const [poolAddress] = getPoolPda(program, stakingMint, rewardAMint, rewardBMint, base, rewardDuration);
+  return PublicKey.findProgramAddressSync(
     [Buffer.from("staking"), poolAddress.toBuffer()],
     program.programId
   );
 }
 
-export async function getRewardAVaultPda(
-  program: anchor.Program<Farming>,
-  stakingMint: anchor.web3.PublicKey,
-  rewardAMint: anchor.web3.PublicKey,
-  rewardBMint: anchor.web3.PublicKey,
-  base: anchor.web3.PublicKey,
-  rewardDuration?: anchor.BN
+export function getRewardAVaultPda(
+  program: Program<Farming>,
+  stakingMint: PublicKey,
+  rewardAMint: PublicKey,
+  rewardBMint: PublicKey,
+  base: PublicKey,
+  rewardDuration?: BN
 ) {
-  const [poolAddress, _] = await getPoolPda(
-    program,
-    stakingMint,
-    rewardAMint,
-    rewardBMint,
-    base,
-    rewardDuration
-  );
-  return anchor.web3.PublicKey.findProgramAddress(
+  const [poolAddress] = getPoolPda(program, stakingMint, rewardAMint, rewardBMint, base, rewardDuration);
+  return PublicKey.findProgramAddressSync(
     [Buffer.from("reward_a"), poolAddress.toBuffer()],
     program.programId
   );
 }
 
-export async function getRewardBVaultPda(
-  program: anchor.Program<Farming>,
-  stakingMint: anchor.web3.PublicKey,
-  rewardAMint: anchor.web3.PublicKey,
-  rewardBMint: anchor.web3.PublicKey,
-  base: anchor.web3.PublicKey,
-  rewardDuration?: anchor.BN
+export function getRewardBVaultPda(
+  program: Program<Farming>,
+  stakingMint: PublicKey,
+  rewardAMint: PublicKey,
+  rewardBMint: PublicKey,
+  base: PublicKey,
+  rewardDuration?: BN
 ) {
-  const [poolAddress, _] = await getPoolPda(
-    program,
-    stakingMint,
-    rewardAMint,
-    rewardBMint,
-    base,
-    rewardDuration
-  );
-  return anchor.web3.PublicKey.findProgramAddress(
+  const [poolAddress] = getPoolPda(program, stakingMint, rewardAMint, rewardBMint, base, rewardDuration);
+  return PublicKey.findProgramAddressSync(
     [Buffer.from("reward_b"), poolAddress.toBuffer()],
     program.programId
   );
 }
 
-export async function getUserPda(
-  program: anchor.Program<Farming>,
-  poolAddress: anchor.web3.PublicKey,
-  userAddress: anchor.web3.PublicKey
+export function getUserPda(
+  program: Program<Farming>,
+  poolAddress: PublicKey,
+  userAddress: PublicKey
 ) {
-  return anchor.web3.PublicKey.findProgramAddress(
+  return PublicKey.findProgramAddressSync(
     [userAddress.toBuffer(), poolAddress.toBuffer()],
     program.programId
   );

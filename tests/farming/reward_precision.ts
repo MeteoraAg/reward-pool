@@ -1,765 +1,342 @@
-import * as anchor from "@project-serum/anchor";
-import { Program } from "@project-serum/anchor";
-import { findProgramAddressSync } from "@project-serum/anchor/dist/cjs/utils/pubkey";
-import { Token, TOKEN_PROGRAM_ID, u64 } from "@solana/spl-token";
-import { BN } from "bn.js";
+import { TOKEN_PROGRAM_ID, createMintToInstruction } from "@solana/spl-token";
+import { Keypair, LAMPORTS_PER_SOL, PublicKey, SYSVAR_RENT_PUBKEY, SystemProgram, Transaction } from "@solana/web3.js";
+import BN from "bn.js";
 import assert from "assert";
-import { Farming } from "../../target/types/farming";
-import { getClock } from "../clock";
 import {
   getPoolPda,
   getRewardAVaultPda,
   getRewardBVaultPda,
   getStakingVaultPda,
 } from "./utils";
-import { sleep } from "@project-serum/common";
-
-const { PublicKey, Keypair, LAMPORTS_PER_SOL } = anchor.web3;
-type BN = anchor.BN;
-type PublicKey = anchor.web3.PublicKey;
-type Keypair = anchor.web3.Keypair;
-
-const provider = anchor.AnchorProvider.env();
-anchor.setProvider(provider);
-
-const program = anchor.workspace.Farming as Program<Farming>;
-const BASE_KEYPAIR = Keypair.generate();
-const ADMIN_KEYPAIR = Keypair.generate();
-const USER_KEYPAIR = Keypair.generate();
+import {
+  startSvm,
+  createFarmingProgram,
+  createToken,
+  getOrCreateAssociatedTokenAccount,
+  getTokenBalance,
+  sendTransaction,
+  warpToTimestamp,
+  warpTime,
+  fetchPool,
+  fetchUser,
+} from "../utils";
+import { LiteSVM } from "litesvm";
 
 const TOKEN_DECIMAL = 6;
 const TOKEN_MULTIPLIER = new BN(10 ** TOKEN_DECIMAL);
 const FUND_AMOUNT = new BN(100).mul(TOKEN_MULTIPLIER);
 const DEPOSIT_AMOUNT = new BN(100).mul(TOKEN_MULTIPLIER);
 
-const REWARD_DURATION = new BN(7); // This create precision loss in reward_rate, which lead to remaining reward
+const REWARD_DURATION = new BN(7); // This creates precision loss in reward_rate
 
-function airDrops(keypairs: Keypair[]) {
-  return Promise.all(
-    keypairs.map(async (k) => {
-      const sig = await provider.connection.requestAirdrop(
-        k.publicKey,
-        10 * LAMPORTS_PER_SOL
-      );
-      return provider.connection.confirmTransaction(sig, "confirmed");
-    })
-  );
+function setupUsers(svm: LiteSVM, keypairs: Keypair[]) {
+  for (const k of keypairs) {
+    svm.airdrop(k.publicKey, BigInt(10 * LAMPORTS_PER_SOL));
+  }
 }
 
-function createAtas(
-  tokens: Token[],
-  userKeypair: Keypair
-): Promise<PublicKey[]> {
-  return Promise.all(
-    tokens.map((t) =>
-      t
-        .getOrCreateAssociatedAccountInfo(userKeypair.publicKey)
-        .then((ata) => ata.address)
-    )
-  );
+function createAtas(svm: LiteSVM, payer: Keypair, mints: PublicKey[], userKeypair: Keypair): PublicKey[] {
+  return mints.map(mint => getOrCreateAssociatedTokenAccount(svm, payer, mint, userKeypair.publicKey));
 }
 
-function mintToMultiple(token: Token, atas: PublicKey[]) {
-  return Promise.all(
-    atas.map((ata) =>
-      token.mintTo(
-        ata,
-        ADMIN_KEYPAIR.publicKey,
-        [ADMIN_KEYPAIR],
-        new u64(1_000_000_000_000)
-      )
-    )
-  );
-}
-
-function createUsers(
-  users: { user: PublicKey; keypair: Keypair }[],
-  pool: PublicKey
-) {
-  return Promise.all(
-    users.map((u) =>
-      program.methods
-        .createUser()
-        .accounts({
-          owner: u.keypair.publicKey,
-          pool,
-          systemProgram: anchor.web3.SystemProgram.programId,
-          user: u.user,
-        })
-        .signers([u.keypair])
-        .rpc()
-    )
-  );
-}
-
-function usersStake(
-  users: { user: PublicKey; keypair: Keypair; stakingAccount: PublicKey }[],
-  pool: PublicKey,
-  stakingVault: PublicKey,
-  depositAmount: BN
-) {
-  return Promise.all(
-    users.map((u) =>
-      program.methods
-        .deposit(depositAmount)
-        .accounts({
-          owner: u.keypair.publicKey,
-          pool,
-          stakeFromAccount: u.stakingAccount,
-          stakingVault,
-          tokenProgram: TOKEN_PROGRAM_ID,
-          user: u.user,
-        })
-        .signers([u.keypair])
-        .rpc()
-    )
-  );
-}
-
-function usersWithdraw(
-  users: { user: PublicKey; keypair: Keypair; stakingAccount: PublicKey }[],
-  pool: PublicKey,
-  stakingVault: PublicKey
-) {
-  return Promise.all(
-    users.map(async (u) => {
-      const userState = await program.account.user.fetch(u.user);
-      return program.methods
-        .withdraw(userState.balanceStaked)
-        .accounts({
-          owner: u.keypair.publicKey,
-          pool,
-          stakingVault,
-          stakeFromAccount: u.stakingAccount,
-          tokenProgram: TOKEN_PROGRAM_ID,
-          user: u.user,
-        })
-        .signers([u.keypair])
-        .rpc();
-    })
-  );
-}
-
-function usersClaim(
-  users: {
-    user: PublicKey;
-    keypair: Keypair;
-    rewardAAccount: PublicKey;
-    rewardBAccount: PublicKey;
-  }[],
-  pool: PublicKey,
-  stakingVault: PublicKey,
-  rewardAVault: PublicKey,
-  rewardBVault: PublicKey
-) {
-  return Promise.all(
-    users.map((u) =>
-      program.methods
-        .claim()
-        .accounts({
-          owner: u.keypair.publicKey,
-          pool,
-          rewardAVault,
-          rewardBVault,
-          stakingVault,
-          tokenProgram: TOKEN_PROGRAM_ID,
-          user: u.user,
-          rewardAAccount: u.rewardAAccount,
-          rewardBAccount: u.rewardBAccount,
-        })
-        .signers([u.keypair])
-        .rpc()
-    )
-  );
-}
-
-async function waitUntilOnChainTime(
-  connection: anchor.web3.Connection,
-  time: number
-) {
-  let onChainTime = 0;
-  do {
-    const clock = await getClock(connection);
-    onChainTime = clock.info.unixTimestamp;
-  } while (onChainTime <= time);
+function mintToMultiple(svm: LiteSVM, payer: Keypair, mint: PublicKey, mintAuthority: Keypair, atas: PublicKey[]) {
+  for (const ata of atas) {
+    const ix = createMintToInstruction(mint, ata, mintAuthority.publicKey, 1_000_000_000_000);
+    const tx = new Transaction();
+    tx.recentBlockhash = svm.latestBlockhash();
+    tx.add(ix);
+    tx.sign(payer, mintAuthority);
+    svm.sendTransaction(tx);
+  }
 }
 
 describe("staking reward precision", () => {
+  const svm = startSvm();
+  const program = createFarmingProgram();
+
+  const BASE_KEYPAIR = Keypair.generate();
+  const ADMIN_KEYPAIR = Keypair.generate();
+  const USER_KEYPAIR = Keypair.generate();
+
   let stakingMint: PublicKey = null;
   let rewardAMint: PublicKey = null;
   let rewardBMint: PublicKey = null;
-
-  let stakingToken: Token = null;
-  let rewardAToken: Token = null;
-  let rewardBToken: Token = null;
 
   let userStakingATA: PublicKey = null;
   let userRewardAATA: PublicKey = null;
   let userRewardBATA: PublicKey = null;
 
-  let adminStakingATA: PublicKey = null;
   let adminRewardAATA: PublicKey = null;
   let adminRewardBATA: PublicKey = null;
   let pool: PublicKey = null;
   let stakingVault: PublicKey = null;
   let rewardAVault: PublicKey = null;
   let rewardBVault: PublicKey = null;
-
   let user: PublicKey = null;
 
   before(async () => {
-    await airDrops([ADMIN_KEYPAIR, USER_KEYPAIR]);
+    setupUsers(svm, [ADMIN_KEYPAIR, USER_KEYPAIR]);
 
-    stakingToken = await Token.createMint(
-      program.provider.connection,
-      ADMIN_KEYPAIR,
-      ADMIN_KEYPAIR.publicKey,
-      null,
-      TOKEN_DECIMAL,
-      TOKEN_PROGRAM_ID
-    );
-    stakingMint = stakingToken.publicKey;
+    stakingMint = createToken(svm, ADMIN_KEYPAIR, ADMIN_KEYPAIR.publicKey, TOKEN_DECIMAL);
+    rewardAMint = createToken(svm, ADMIN_KEYPAIR, ADMIN_KEYPAIR.publicKey, TOKEN_DECIMAL);
+    rewardBMint = createToken(svm, ADMIN_KEYPAIR, ADMIN_KEYPAIR.publicKey, TOKEN_DECIMAL);
 
-    rewardAToken = await Token.createMint(
-      program.provider.connection,
-      ADMIN_KEYPAIR,
-      ADMIN_KEYPAIR.publicKey,
-      null,
-      TOKEN_DECIMAL,
-      TOKEN_PROGRAM_ID
-    );
-    rewardAMint = rewardAToken.publicKey;
+    [pool] = getPoolPda(program, stakingMint, rewardAMint, rewardBMint, BASE_KEYPAIR.publicKey, REWARD_DURATION);
 
-    rewardBToken = await Token.createMint(
-      program.provider.connection,
-      ADMIN_KEYPAIR,
-      ADMIN_KEYPAIR.publicKey,
-      null,
-      TOKEN_DECIMAL,
-      TOKEN_PROGRAM_ID
-    );
-    rewardBMint = rewardBToken.publicKey;
+    [userStakingATA, userRewardAATA, userRewardBATA] = createAtas(svm, ADMIN_KEYPAIR, [stakingMint, rewardAMint, rewardBMint], USER_KEYPAIR);
+    const adminAtas = createAtas(svm, ADMIN_KEYPAIR, [stakingMint, rewardAMint, rewardBMint], ADMIN_KEYPAIR);
+    const [adminStakingATA] = adminAtas;
+    adminRewardAATA = adminAtas[1];
+    adminRewardBATA = adminAtas[2];
 
-    [pool] = await getPoolPda(
-      program,
-      stakingMint,
-      rewardAMint,
-      rewardBMint,
-      BASE_KEYPAIR.publicKey,
-      REWARD_DURATION
-    );
+    mintToMultiple(svm, ADMIN_KEYPAIR, stakingMint, ADMIN_KEYPAIR, [userStakingATA, adminStakingATA]);
+    mintToMultiple(svm, ADMIN_KEYPAIR, rewardAMint, ADMIN_KEYPAIR, [adminRewardAATA]);
+    mintToMultiple(svm, ADMIN_KEYPAIR, rewardBMint, ADMIN_KEYPAIR, [adminRewardBATA]);
 
-    [userStakingATA, userRewardAATA, userRewardBATA] = await createAtas(
-      [stakingToken, rewardAToken, rewardBToken],
-      USER_KEYPAIR
-    );
+    [stakingVault] = getStakingVaultPda(program, stakingMint, rewardAMint, rewardBMint, BASE_KEYPAIR.publicKey, REWARD_DURATION);
+    [rewardAVault] = getRewardAVaultPda(program, stakingMint, rewardAMint, rewardBMint, BASE_KEYPAIR.publicKey, REWARD_DURATION);
+    [rewardBVault] = getRewardBVaultPda(program, stakingMint, rewardAMint, rewardBMint, BASE_KEYPAIR.publicKey, REWARD_DURATION);
 
-    [adminStakingATA, adminRewardAATA, adminRewardBATA] = await createAtas(
-      [stakingToken, rewardAToken, rewardBToken],
-      ADMIN_KEYPAIR
-    );
-
-    await mintToMultiple(stakingToken, [userStakingATA, adminStakingATA]);
-    await mintToMultiple(rewardAToken, [adminRewardAATA]);
-    await mintToMultiple(rewardBToken, [adminRewardBATA]);
-
-    [stakingVault] = await getStakingVaultPda(
-      program,
-      stakingMint,
-      rewardAMint,
-      rewardBMint,
-      BASE_KEYPAIR.publicKey,
-      REWARD_DURATION
-    );
-    [rewardAVault] = await getRewardAVaultPda(
-      program,
-      stakingMint,
-      rewardAMint,
-      rewardBMint,
-      BASE_KEYPAIR.publicKey,
-      REWARD_DURATION
-    );
-    [rewardBVault] = await getRewardBVaultPda(
-      program,
-      stakingMint,
-      rewardAMint,
-      rewardBMint,
-      BASE_KEYPAIR.publicKey,
-      REWARD_DURATION
-    );
-
-    [user] = findProgramAddressSync(
+    [user] = PublicKey.findProgramAddressSync(
       [USER_KEYPAIR.publicKey.toBuffer(), pool.toBuffer()],
       program.programId
     );
 
-    await program.methods
-      .initializePool(REWARD_DURATION)
-      .accounts({
-        authority: ADMIN_KEYPAIR.publicKey,
-        base: BASE_KEYPAIR.publicKey,
-        pool,
-        rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-        rewardAMint,
-        rewardBMint,
-        rewardAVault,
-        rewardBVault,
-        stakingMint,
-        stakingVault,
-        systemProgram: anchor.web3.SystemProgram.programId,
-        tokenProgram: TOKEN_PROGRAM_ID,
-      })
-      .signers([BASE_KEYPAIR, ADMIN_KEYPAIR])
-      .rpc();
+    const initIx = await program.methods.initializePool(REWARD_DURATION)
+      .accountsPartial({ authority: ADMIN_KEYPAIR.publicKey, base: BASE_KEYPAIR.publicKey, pool, rent: SYSVAR_RENT_PUBKEY, rewardAMint, rewardBMint, rewardAVault, rewardBVault, stakingMint, stakingVault, systemProgram: SystemProgram.programId, tokenProgram: TOKEN_PROGRAM_ID })
+      .instruction();
+    sendTransaction(svm, new Transaction().add(initIx), [ADMIN_KEYPAIR, BASE_KEYPAIR]);
 
     console.log("Program ID: ", program.programId.toString());
-    console.log("Wallet: ", provider.wallet.publicKey.toString());
   });
 
   it("have remaining reward", async () => {
-    await createUsers(
-      [
-        {
-          keypair: USER_KEYPAIR,
-          user,
-        },
-      ],
-      pool
-    );
-    await usersStake(
-      [{ keypair: USER_KEYPAIR, stakingAccount: userStakingATA, user }],
-      pool,
-      stakingVault,
-      DEPOSIT_AMOUNT
-    );
+    // Create user
+    const createUserIx = await program.methods.createUser()
+      .accountsPartial({ owner: USER_KEYPAIR.publicKey, pool, systemProgram: SystemProgram.programId, user })
+      .instruction();
+    sendTransaction(svm, new Transaction().add(createUserIx), [USER_KEYPAIR]);
 
-    await program.methods
-      .fund(FUND_AMOUNT, FUND_AMOUNT)
-      .accounts({
-        fromA: adminRewardAATA,
-        fromB: adminRewardBATA,
-        funder: ADMIN_KEYPAIR.publicKey,
-        pool,
-        rewardAVault,
-        rewardBVault,
-        stakingVault,
-        tokenProgram: TOKEN_PROGRAM_ID,
-      })
-      .signers([ADMIN_KEYPAIR])
-      .rpc();
+    // Stake
+    const depositIx = await program.methods.deposit(DEPOSIT_AMOUNT)
+      .accountsPartial({ owner: USER_KEYPAIR.publicKey, pool, stakeFromAccount: userStakingATA, stakingVault, tokenProgram: TOKEN_PROGRAM_ID, user })
+      .instruction();
+    sendTransaction(svm, new Transaction().add(depositIx), [USER_KEYPAIR]);
 
-    const poolState = await program.account.pool.fetch(pool);
-    await waitUntilOnChainTime(
-      program.provider.connection,
-      poolState.rewardDurationEnd.toNumber()
-    );
+    // Fund
+    const fundIx = await program.methods.fund(FUND_AMOUNT, FUND_AMOUNT)
+      .accountsPartial({ fromA: adminRewardAATA, fromB: adminRewardBATA, funder: ADMIN_KEYPAIR.publicKey, pool, rewardAVault, rewardBVault, stakingVault, tokenProgram: TOKEN_PROGRAM_ID })
+      .instruction();
+    sendTransaction(svm, new Transaction().add(fundIx), [ADMIN_KEYPAIR]);
 
-    await usersClaim(
-      [
-        {
-          keypair: USER_KEYPAIR,
-          user,
-          rewardAAccount: userRewardAATA,
-          rewardBAccount: userRewardBATA,
-        },
-      ],
-      pool,
-      stakingVault,
-      rewardAVault,
-      rewardBVault
-    );
+    const poolState = fetchPool(svm, program, pool);
+    warpToTimestamp(svm, poolState.rewardDurationEnd.toNumber());
 
-    const [userRewardABalance, userRewardBBalance] = await Promise.all([
-      program.provider.connection.getTokenAccountBalance(userRewardAATA),
-      program.provider.connection.getTokenAccountBalance(userRewardBATA),
-    ]).then(([a, b]) => [new BN(a.value.amount), new BN(b.value.amount)]);
+    // Claim
+    const claimIx = await program.methods.claim()
+      .accountsPartial({ owner: USER_KEYPAIR.publicKey, pool, rewardAAccount: userRewardAATA, rewardBAccount: userRewardBATA, rewardAVault, rewardBVault, stakingVault, tokenProgram: TOKEN_PROGRAM_ID, user })
+      .instruction();
+    sendTransaction(svm, new Transaction().add(claimIx), [USER_KEYPAIR]);
 
-    assert.strictEqual(
-      userRewardABalance.toNumber(),
-      FUND_AMOUNT.toNumber() - 1
-    );
-    assert.strictEqual(
-      userRewardBBalance.toNumber(),
-      FUND_AMOUNT.toNumber() - 1
-    );
+    const userRewardABalance = getTokenBalance(svm, userRewardAATA);
+    const userRewardBBalance = getTokenBalance(svm, userRewardBATA);
+
+    assert.strictEqual(userRewardABalance.toNumber(), FUND_AMOUNT.toNumber() - 1);
+    assert.strictEqual(userRewardBBalance.toNumber(), FUND_AMOUNT.toNumber() - 1);
   });
 });
 
-describe.only("staking reward when no staker", () => {
+describe("staking reward when no staker", () => {
+  const svm = startSvm();
+  const program = createFarmingProgram();
+
+  const BASE_KEYPAIR = Keypair.generate();
+  const ADMIN_KEYPAIR = Keypair.generate();
+  const USER_KEYPAIR = Keypair.generate();
+
   let stakingMint: PublicKey = null;
   let rewardAMint: PublicKey = null;
   let rewardBMint: PublicKey = null;
-
-  let stakingToken: Token = null;
-  let rewardAToken: Token = null;
-  let rewardBToken: Token = null;
 
   let userStakingATA: PublicKey = null;
   let userRewardAATA: PublicKey = null;
   let userRewardBATA: PublicKey = null;
 
-  let adminStakingATA: PublicKey = null;
   let adminRewardAATA: PublicKey = null;
   let adminRewardBATA: PublicKey = null;
   let pool: PublicKey = null;
   let stakingVault: PublicKey = null;
   let rewardAVault: PublicKey = null;
   let rewardBVault: PublicKey = null;
-
   let user: PublicKey = null;
   let claimedRewardA = new BN(0);
   let claimedRewardB = new BN(0);
 
   before(async () => {
-    await airDrops([ADMIN_KEYPAIR, USER_KEYPAIR]);
+    setupUsers(svm, [ADMIN_KEYPAIR, USER_KEYPAIR]);
 
-    stakingToken = await Token.createMint(
-      program.provider.connection,
-      ADMIN_KEYPAIR,
-      ADMIN_KEYPAIR.publicKey,
-      null,
-      TOKEN_DECIMAL,
-      TOKEN_PROGRAM_ID
-    );
-    stakingMint = stakingToken.publicKey;
+    stakingMint = createToken(svm, ADMIN_KEYPAIR, ADMIN_KEYPAIR.publicKey, TOKEN_DECIMAL);
+    rewardAMint = createToken(svm, ADMIN_KEYPAIR, ADMIN_KEYPAIR.publicKey, TOKEN_DECIMAL);
+    rewardBMint = createToken(svm, ADMIN_KEYPAIR, ADMIN_KEYPAIR.publicKey, TOKEN_DECIMAL);
 
-    rewardAToken = await Token.createMint(
-      program.provider.connection,
-      ADMIN_KEYPAIR,
-      ADMIN_KEYPAIR.publicKey,
-      null,
-      TOKEN_DECIMAL,
-      TOKEN_PROGRAM_ID
-    );
-    rewardAMint = rewardAToken.publicKey;
+    [pool] = getPoolPda(program, stakingMint, rewardAMint, rewardBMint, BASE_KEYPAIR.publicKey, REWARD_DURATION);
 
-    rewardBToken = await Token.createMint(
-      program.provider.connection,
-      ADMIN_KEYPAIR,
-      ADMIN_KEYPAIR.publicKey,
-      null,
-      TOKEN_DECIMAL,
-      TOKEN_PROGRAM_ID
-    );
-    rewardBMint = rewardBToken.publicKey;
+    [userStakingATA, userRewardAATA, userRewardBATA] = createAtas(svm, ADMIN_KEYPAIR, [stakingMint, rewardAMint, rewardBMint], USER_KEYPAIR);
+    const adminAtas = createAtas(svm, ADMIN_KEYPAIR, [stakingMint, rewardAMint, rewardBMint], ADMIN_KEYPAIR);
+    adminRewardAATA = adminAtas[1];
+    adminRewardBATA = adminAtas[2];
 
-    [pool] = await getPoolPda(
-      program,
-      stakingMint,
-      rewardAMint,
-      rewardBMint,
-      BASE_KEYPAIR.publicKey,
-      REWARD_DURATION
-    );
+    mintToMultiple(svm, ADMIN_KEYPAIR, stakingMint, ADMIN_KEYPAIR, [userStakingATA, adminAtas[0]]);
+    mintToMultiple(svm, ADMIN_KEYPAIR, rewardAMint, ADMIN_KEYPAIR, [adminRewardAATA]);
+    mintToMultiple(svm, ADMIN_KEYPAIR, rewardBMint, ADMIN_KEYPAIR, [adminRewardBATA]);
 
-    [userStakingATA, userRewardAATA, userRewardBATA] = await createAtas(
-      [stakingToken, rewardAToken, rewardBToken],
-      USER_KEYPAIR
-    );
+    [stakingVault] = getStakingVaultPda(program, stakingMint, rewardAMint, rewardBMint, BASE_KEYPAIR.publicKey, REWARD_DURATION);
+    [rewardAVault] = getRewardAVaultPda(program, stakingMint, rewardAMint, rewardBMint, BASE_KEYPAIR.publicKey, REWARD_DURATION);
+    [rewardBVault] = getRewardBVaultPda(program, stakingMint, rewardAMint, rewardBMint, BASE_KEYPAIR.publicKey, REWARD_DURATION);
 
-    [adminStakingATA, adminRewardAATA, adminRewardBATA] = await createAtas(
-      [stakingToken, rewardAToken, rewardBToken],
-      ADMIN_KEYPAIR
-    );
-
-    await mintToMultiple(stakingToken, [userStakingATA, adminStakingATA]);
-    await mintToMultiple(rewardAToken, [adminRewardAATA]);
-    await mintToMultiple(rewardBToken, [adminRewardBATA]);
-
-    [stakingVault] = await getStakingVaultPda(
-      program,
-      stakingMint,
-      rewardAMint,
-      rewardBMint,
-      BASE_KEYPAIR.publicKey,
-      REWARD_DURATION
-    );
-    [rewardAVault] = await getRewardAVaultPda(
-      program,
-      stakingMint,
-      rewardAMint,
-      rewardBMint,
-      BASE_KEYPAIR.publicKey,
-      REWARD_DURATION
-    );
-    [rewardBVault] = await getRewardBVaultPda(
-      program,
-      stakingMint,
-      rewardAMint,
-      rewardBMint,
-      BASE_KEYPAIR.publicKey,
-      REWARD_DURATION
-    );
-
-    [user] = findProgramAddressSync(
+    [user] = PublicKey.findProgramAddressSync(
       [USER_KEYPAIR.publicKey.toBuffer(), pool.toBuffer()],
       program.programId
     );
 
-    await program.methods
-      .initializePool(REWARD_DURATION)
-      .accounts({
-        authority: ADMIN_KEYPAIR.publicKey,
-        base: BASE_KEYPAIR.publicKey,
-        pool,
-        rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-        rewardAMint,
-        rewardBMint,
-        rewardAVault,
-        rewardBVault,
-        stakingMint,
-        stakingVault,
-        systemProgram: anchor.web3.SystemProgram.programId,
-        tokenProgram: TOKEN_PROGRAM_ID,
-      })
-      .signers([BASE_KEYPAIR, ADMIN_KEYPAIR])
-      .rpc();
+    const initIx = await program.methods.initializePool(REWARD_DURATION)
+      .accountsPartial({ authority: ADMIN_KEYPAIR.publicKey, base: BASE_KEYPAIR.publicKey, pool, rent: SYSVAR_RENT_PUBKEY, rewardAMint, rewardBMint, rewardAVault, rewardBVault, stakingMint, stakingVault, systemProgram: SystemProgram.programId, tokenProgram: TOKEN_PROGRAM_ID })
+      .instruction();
+    sendTransaction(svm, new Transaction().add(initIx), [ADMIN_KEYPAIR, BASE_KEYPAIR]);
 
     console.log("Program ID: ", program.programId.toString());
-    console.log("Wallet: ", provider.wallet.publicKey.toString());
   });
 
   it("start farm without stakers", async () => {
-    await program.methods
-      .fund(FUND_AMOUNT, FUND_AMOUNT)
-      .accounts({
-        fromA: adminRewardAATA,
-        fromB: adminRewardBATA,
-        funder: ADMIN_KEYPAIR.publicKey,
-        pool,
-        rewardAVault,
-        rewardBVault,
-        stakingVault,
-        tokenProgram: TOKEN_PROGRAM_ID,
-      })
-      .signers([ADMIN_KEYPAIR])
-      .rpc();
+    const fundIx = await program.methods.fund(FUND_AMOUNT, FUND_AMOUNT)
+      .accountsPartial({ fromA: adminRewardAATA, fromB: adminRewardBATA, funder: ADMIN_KEYPAIR.publicKey, pool, rewardAVault, rewardBVault, stakingVault, tokenProgram: TOKEN_PROGRAM_ID })
+      .instruction();
+    sendTransaction(svm, new Transaction().add(fundIx), [ADMIN_KEYPAIR]);
 
-    const poolState = await program.account.pool.fetch(pool);
+    const poolState = fetchPool(svm, program, pool);
     assert.strictEqual(poolState.totalStaked.toNumber(), 0);
     assert.strictEqual(poolState.rewardDurationEnd.toNumber() > 0, true);
   });
 
   it("stake after the farms started for 1 seconds", async () => {
-    await sleep(1000);
-    await createUsers(
-      [
-        {
-          keypair: USER_KEYPAIR,
-          user,
-        },
-      ],
-      pool
-    );
-    await usersStake(
-      [{ keypair: USER_KEYPAIR, stakingAccount: userStakingATA, user }],
-      pool,
-      stakingVault,
-      DEPOSIT_AMOUNT
-    );
+    warpTime(svm, 1);
 
-    const [userState, poolState] = await Promise.all([
-      program.account.user.fetch(user),
-      program.account.pool.fetch(pool),
-    ]);
+    const createUserIx = await program.methods.createUser()
+      .accountsPartial({ owner: USER_KEYPAIR.publicKey, pool, systemProgram: SystemProgram.programId, user })
+      .instruction();
+    sendTransaction(svm, new Transaction().add(createUserIx), [USER_KEYPAIR]);
 
+    const depositIx = await program.methods.deposit(DEPOSIT_AMOUNT)
+      .accountsPartial({ owner: USER_KEYPAIR.publicKey, pool, stakeFromAccount: userStakingATA, stakingVault, tokenProgram: TOKEN_PROGRAM_ID, user })
+      .instruction();
+    sendTransaction(svm, new Transaction().add(depositIx), [USER_KEYPAIR]);
+
+    const userState = fetchUser(svm, program, user);
+    const poolState = fetchPool(svm, program, pool);
     assert.strictEqual(userState.balanceStaked.eq(DEPOSIT_AMOUNT), true);
     assert.strictEqual(poolState.totalStaked.eq(DEPOSIT_AMOUNT), true);
   });
 
   it("claim rewards when no stakers", async () => {
-    await sleep(1000);
+    warpTime(svm, 1);
 
-    await usersWithdraw(
-      [{ keypair: USER_KEYPAIR, stakingAccount: userStakingATA, user }],
-      pool,
-      stakingVault
-    );
+    // Withdraw all
+    const userState = fetchUser(svm, program, user);
+    const withdrawIx = await program.methods.withdraw(userState.balanceStaked)
+      .accountsPartial({ owner: USER_KEYPAIR.publicKey, pool, stakingVault, stakeFromAccount: userStakingATA, tokenProgram: TOKEN_PROGRAM_ID, user })
+      .instruction();
+    sendTransaction(svm, new Transaction().add(withdrawIx), [USER_KEYPAIR]);
 
-    const stakingVaultBalance = await program.provider.connection
-      .getTokenAccountBalance(stakingVault)
-      .then((t) => new BN(t.value.amount));
-    const [userState, poolState] = await Promise.all([
-      program.account.user.fetch(user),
-      program.account.pool.fetch(pool),
-    ]);
+    assert.strictEqual(getTokenBalance(svm, stakingVault).toNumber(), 0);
+    assert.strictEqual(fetchUser(svm, program, user).balanceStaked.toNumber(), 0);
+    assert.strictEqual(fetchPool(svm, program, pool).totalStaked.toNumber(), 0);
 
-    assert.strictEqual(stakingVaultBalance.toNumber(), 0);
-    assert.strictEqual(userState.balanceStaked.toNumber(), 0);
-    assert.strictEqual(poolState.totalStaked.toNumber(), 0);
+    const bUserTokenA = getTokenBalance(svm, userRewardAATA);
+    const bUserTokenB = getTokenBalance(svm, userRewardBATA);
 
-    // Claim reward A and B
-    const [bUserTokenABal, bUserTokenBBal] = await Promise.all([
-      program.provider.connection.getTokenAccountBalance(userRewardAATA),
-      program.provider.connection.getTokenAccountBalance(userRewardBATA),
-    ]).then((bals) => bals.map((bal) => new BN(bal.value.amount)));
+    const claimIx = await program.methods.claim()
+      .accountsPartial({ owner: USER_KEYPAIR.publicKey, pool, rewardAVault, rewardBVault, stakingVault, tokenProgram: TOKEN_PROGRAM_ID, user, rewardAAccount: userRewardAATA, rewardBAccount: userRewardBATA })
+      .instruction();
+    sendTransaction(svm, new Transaction().add(claimIx), [USER_KEYPAIR]);
 
-    await usersClaim(
-      [
-        {
-          keypair: USER_KEYPAIR,
-          user,
-          rewardAAccount: userRewardAATA,
-          rewardBAccount: userRewardBATA,
-        },
-      ],
-      pool,
-      stakingVault,
-      rewardAVault,
-      rewardBVault
-    );
+    const aUserTokenA = getTokenBalance(svm, userRewardAATA);
+    const aUserTokenB = getTokenBalance(svm, userRewardBATA);
+    assert.strictEqual(aUserTokenA.gt(bUserTokenA), true);
+    assert.strictEqual(aUserTokenB.gt(bUserTokenB), true);
 
-    const [aUserTokenABal, aUserTokenBBal] = await Promise.all([
-      program.provider.connection.getTokenAccountBalance(userRewardAATA),
-      program.provider.connection.getTokenAccountBalance(userRewardBATA),
-    ]).then((bals) => bals.map((bal) => new BN(bal.value.amount)));
-
-    assert.strictEqual(aUserTokenABal.gt(bUserTokenABal), true);
-    assert.strictEqual(aUserTokenBBal.gt(bUserTokenBBal), true);
-
-    claimedRewardA = claimedRewardA.add(aUserTokenABal.sub(bUserTokenABal));
-    claimedRewardB = claimedRewardB.add(aUserTokenBBal.sub(bUserTokenBBal));
+    claimedRewardA = claimedRewardA.add(aUserTokenA.sub(bUserTokenA));
+    claimedRewardB = claimedRewardB.add(aUserTokenB.sub(bUserTokenB));
   });
 
   it("no rewards when no stakers", async () => {
-    await sleep(1000);
-    const [bUserState, bPoolState] = await Promise.all([
-      program.account.user.fetch(user),
-      program.account.pool.fetch(pool),
-    ]);
-
-    const [bUserTokenABal, bUserTokenBBal] = await Promise.all([
-      program.provider.connection.getTokenAccountBalance(userRewardAATA),
-      program.provider.connection.getTokenAccountBalance(userRewardBATA),
-    ]).then((bals) => bals.map((bal) => new BN(bal.value.amount)));
+    warpTime(svm, 1);
+    const bUserState = fetchUser(svm, program, user);
+    const bPoolState = fetchPool(svm, program, pool);
+    const bUserTokenA = getTokenBalance(svm, userRewardAATA);
+    const bUserTokenB = getTokenBalance(svm, userRewardBATA);
 
     // Trigger update of reward
-    await usersClaim(
-      [
-        {
-          keypair: USER_KEYPAIR,
-          user,
-          rewardAAccount: userRewardAATA,
-          rewardBAccount: userRewardBATA,
-        },
-      ],
-      pool,
-      stakingVault,
-      rewardAVault,
-      rewardBVault
-    );
+    const claimIx = await program.methods.claim()
+      .accountsPartial({ owner: USER_KEYPAIR.publicKey, pool, rewardAVault, rewardBVault, stakingVault, tokenProgram: TOKEN_PROGRAM_ID, user, rewardAAccount: userRewardAATA, rewardBAccount: userRewardBATA })
+      .instruction();
+    sendTransaction(svm, new Transaction().add(claimIx), [USER_KEYPAIR]);
 
-    const [aUserState, aPoolState] = await Promise.all([
-      program.account.user.fetch(user),
-      program.account.pool.fetch(pool),
-    ]);
+    const aUserState = fetchUser(svm, program, user);
+    const aPoolState = fetchPool(svm, program, pool);
+    assert.strictEqual(aUserState.rewardAPerTokenPending.eq(bUserState.rewardAPerTokenPending), true);
+    assert.strictEqual(aUserState.rewardBPerTokenPending.eq(bUserState.rewardBPerTokenPending), true);
+    assert.strictEqual(aPoolState.rewardAPerTokenStored.eq(bPoolState.rewardAPerTokenStored), true);
+    assert.strictEqual(aPoolState.rewardBPerTokenStored.eq(bPoolState.rewardBPerTokenStored), true);
 
-    assert.strictEqual(
-      aUserState.rewardAPerTokenPending.eq(bUserState.rewardAPerTokenPending),
-      true
-    );
-    assert.strictEqual(
-      aUserState.rewardBPerTokenPending.eq(bUserState.rewardBPerTokenPending),
-      true
-    );
-    assert.strictEqual(
-      aPoolState.rewardAPerTokenStored.eq(bPoolState.rewardAPerTokenStored),
-      true
-    );
-    assert.strictEqual(
-      aPoolState.rewardBPerTokenStored.eq(bPoolState.rewardBPerTokenStored),
-      true
-    );
-
-    const [aUserTokenABal, aUserTokenBBal] = await Promise.all([
-      program.provider.connection.getTokenAccountBalance(userRewardAATA),
-      program.provider.connection.getTokenAccountBalance(userRewardBATA),
-    ]).then((bals) => bals.map((bal) => new BN(bal.value.amount)));
-
-    assert.strictEqual(aUserTokenABal.eq(bUserTokenABal), true);
-    assert.strictEqual(aUserTokenBBal.eq(bUserTokenBBal), true);
+    const aUserTokenA = getTokenBalance(svm, userRewardAATA);
+    const aUserTokenB = getTokenBalance(svm, userRewardBATA);
+    assert.strictEqual(aUserTokenA.eq(bUserTokenA), true);
+    assert.strictEqual(aUserTokenB.eq(bUserTokenB), true);
   });
 
   it("fund reward A/B when no stakers", async () => {
-    const bPoolState = await program.account.pool.fetch(pool);
+    const bPoolState = fetchPool(svm, program, pool);
 
-    await program.methods
-      .fund(FUND_AMOUNT, FUND_AMOUNT)
-      .accounts({
-        fromA: adminRewardAATA,
-        fromB: adminRewardBATA,
-        funder: ADMIN_KEYPAIR.publicKey,
-        pool,
-        rewardAVault,
-        rewardBVault,
-        stakingVault,
-        tokenProgram: TOKEN_PROGRAM_ID,
-      })
-      .signers([ADMIN_KEYPAIR])
-      .rpc();
+    const fundIx = await program.methods.fund(FUND_AMOUNT, FUND_AMOUNT)
+      .accountsPartial({ fromA: adminRewardAATA, fromB: adminRewardBATA, funder: ADMIN_KEYPAIR.publicKey, pool, rewardAVault, rewardBVault, stakingVault, tokenProgram: TOKEN_PROGRAM_ID })
+      .instruction();
+    sendTransaction(svm, new Transaction().add(fundIx), [ADMIN_KEYPAIR]);
 
-    const aPoolState = await program.account.pool.fetch(pool);
-    assert.strictEqual(
-      aPoolState.rewardDurationEnd.gt(bPoolState.rewardDurationEnd),
-      true
-    );
-    assert.strictEqual(aPoolState.rewardARate.gt(bPoolState.rewardARate), true);
-    assert.strictEqual(aPoolState.rewardBRate.gt(bPoolState.rewardBRate), true);
+    const aPoolState = fetchPool(svm, program, pool);
+    assert.strictEqual(aPoolState.rewardDurationEnd.gt(bPoolState.rewardDurationEnd), true);
+    assert.strictEqual(aPoolState.rewardARateU128.gt(bPoolState.rewardARateU128), true);
+    assert.strictEqual(aPoolState.rewardBRateU128.gt(bPoolState.rewardBRateU128), true);
   });
 
   it("stake when no stakers", async () => {
-    await usersStake(
-      [{ keypair: USER_KEYPAIR, stakingAccount: userStakingATA, user }],
-      pool,
-      stakingVault,
-      DEPOSIT_AMOUNT
-    );
+    const depositIx = await program.methods.deposit(DEPOSIT_AMOUNT)
+      .accountsPartial({ owner: USER_KEYPAIR.publicKey, pool, stakeFromAccount: userStakingATA, stakingVault, tokenProgram: TOKEN_PROGRAM_ID, user })
+      .instruction();
+    sendTransaction(svm, new Transaction().add(depositIx), [USER_KEYPAIR]);
 
-    const [userState, poolState] = await Promise.all([
-      program.account.user.fetch(user),
-      program.account.pool.fetch(pool),
-    ]);
-
+    const userState = fetchUser(svm, program, user);
+    const poolState = fetchPool(svm, program, pool);
     assert.strictEqual(userState.balanceStaked.eq(DEPOSIT_AMOUNT), true);
     assert.strictEqual(poolState.totalStaked.eq(DEPOSIT_AMOUNT), true);
   });
 
   it("rewards during the period of no stakers will remain in the vault", async () => {
-    let poolState = await program.account.pool.fetch(pool);
-    // Wait until reward duration end
-    await waitUntilOnChainTime(
-      provider.connection,
-      poolState.rewardDurationEnd.toNumber()
-    );
+    let poolState = fetchPool(svm, program, pool);
+    warpToTimestamp(svm, poolState.rewardDurationEnd.toNumber());
 
-    // Claim reward A and B
-    const [bUserTokenABal, bUserTokenBBal] = await Promise.all([
-      program.provider.connection.getTokenAccountBalance(userRewardAATA),
-      program.provider.connection.getTokenAccountBalance(userRewardBATA),
-    ]).then((bals) => bals.map((bal) => new BN(bal.value.amount)));
+    const bUserTokenA = getTokenBalance(svm, userRewardAATA);
+    const bUserTokenB = getTokenBalance(svm, userRewardBATA);
 
-    await usersClaim(
-      [
-        {
-          keypair: USER_KEYPAIR,
-          user,
-          rewardAAccount: userRewardAATA,
-          rewardBAccount: userRewardBATA,
-        },
-      ],
-      pool,
-      stakingVault,
-      rewardAVault,
-      rewardBVault
-    );
+    const claimIx = await program.methods.claim()
+      .accountsPartial({ owner: USER_KEYPAIR.publicKey, pool, rewardAVault, rewardBVault, stakingVault, tokenProgram: TOKEN_PROGRAM_ID, user, rewardAAccount: userRewardAATA, rewardBAccount: userRewardBATA })
+      .instruction();
+    sendTransaction(svm, new Transaction().add(claimIx), [USER_KEYPAIR]);
 
-    const [aUserTokenABal, aUserTokenBBal] = await Promise.all([
-      program.provider.connection.getTokenAccountBalance(userRewardAATA),
-      program.provider.connection.getTokenAccountBalance(userRewardBATA),
-    ]).then((bals) => bals.map((bal) => new BN(bal.value.amount)));
+    const aUserTokenA = getTokenBalance(svm, userRewardAATA);
+    const aUserTokenB = getTokenBalance(svm, userRewardBATA);
 
-    const totalClaimedTokenA = aUserTokenABal.sub(bUserTokenABal);
-    const totalClaimedTokenB = aUserTokenBBal.sub(bUserTokenBBal);
+    const totalClaimedTokenA = aUserTokenA.sub(bUserTokenA);
+    const totalClaimedTokenB = aUserTokenB.sub(bUserTokenB);
 
     const totalRewardA = FUND_AMOUNT.mul(new BN(2)).sub(claimedRewardA);
     const totalRewardB = FUND_AMOUNT.mul(new BN(2)).sub(claimedRewardB);
@@ -767,10 +344,8 @@ describe.only("staking reward when no staker", () => {
     const rewardARemaining = totalRewardA.sub(totalClaimedTokenA);
     const rewardBRemaining = totalRewardB.sub(totalClaimedTokenB);
 
-    const rewardARemainingPercentage =
-      (rewardARemaining.toNumber() / totalRewardA.toNumber()) * 100;
-    const rewardBRemainingPercentage =
-      (rewardBRemaining.toNumber() / totalRewardB.toNumber()) * 100;
+    const rewardARemainingPercentage = (rewardARemaining.toNumber() / totalRewardA.toNumber()) * 100;
+    const rewardBRemainingPercentage = (rewardBRemaining.toNumber() / totalRewardB.toNumber()) * 100;
 
     console.log("Percentage of reward A remains", rewardARemainingPercentage);
     console.log("Percentage of reward B remains", rewardBRemainingPercentage);

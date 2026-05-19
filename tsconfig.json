@@ -1,8 +1,8 @@
 {
   "compilerOptions": {
-    "types": ["jest"],
-    "target": "es6",
-    "lib": ["es2019"],
+    "types": ["mocha"],
+    "target": "es2020",
+    "lib": ["es2020"],
     "allowJs": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
@@ -12,6 +12,8 @@
     "downlevelIteration": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "allowSyntheticDefaultImports": true
+    "allowSyntheticDefaultImports": true,
+    "strictNullChecks": false,
+    "noImplicitAny": false
   }
 }
