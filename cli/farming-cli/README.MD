@@ -87,7 +87,7 @@ reward_b_mint: D6a1BML94qorutv8j67fdpmYiQGou3iBArGiw467Qwzj
 ### Initialize Pool
 
 ```bash
-$ ./dual-farming-cli init --staking-mint AtssC9B1jGqW4d2PVZmMt6cLLpQ84DycLpAae7EW3XL6 --reward-a-mint Gu7Ze57kKQF9r4u4oo4tAsk8riP8idw4gBN6hgUGQdTd --reward-b-mint D6a1BML94qorutv8j67fdpmYiQGou3iBArGiw467Qwzj 2592000`
+$ ./dual-farming-cli init --staking-mint AtssC9B1jGqW4d2PVZmMt6cLLpQ84DycLpAae7EW3XL6 --reward-a-mint Gu7Ze57kKQF9r4u4oo4tAsk8riP8idw4gBN6hgUGQdTd --reward-b-mint D6a1BML94qorutv8j67fdpmYiQGou3iBArGiw467Qwzj 2592000
 
 Wallet 3ekBoR8LmkuMmUm8M3iURoafbwEVQJzTsPbWEtxXk1d5
 Program ID: "DUALszVmfxqFLXDQpkrf8S6qHNxjqeBdDnqne74Bwhvw"
